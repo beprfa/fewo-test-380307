@@ -228,6 +228,30 @@ const terms = [
     const departureInput = document.getElementById('departure') as HTMLInputElement | null;
     const dateError = document.getElementById('date-error');
 
+    // Prefill apartment + dates from query params (?apartment=&checkIn=&checkOut=)
+    // sent by the per-apartment price-calculator CTA on the home page.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const apartmentParam = params.get('apartment');
+      const checkInParam = params.get('checkIn');
+      const checkOutParam = params.get('checkOut');
+      if (apartmentParam) {
+        const apartmentSelect = document.getElementById('apartment') as HTMLSelectElement | null;
+        if (apartmentSelect && Array.from(apartmentSelect.options).some((o) => o.value === apartmentParam)) {
+          apartmentSelect.value = apartmentParam;
+        }
+      }
+      const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+      if (arrivalInput && checkInParam && isoDate.test(checkInParam)) {
+        arrivalInput.value = checkInParam;
+      }
+      if (departureInput && checkOutParam && isoDate.test(checkOutParam)) {
+        departureInput.value = checkOutParam;
+      }
+    } catch {
+      /* prefill is best-effort */
+    }
+
     function validateDates() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
