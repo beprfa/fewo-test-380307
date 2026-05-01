@@ -200,74 +200,83 @@ const terms = [
 </Layout>
 
 <script>
-  const form = document.getElementById('booking-form') as HTMLFormElement;
-  const successMessage = document.getElementById('success-message');
-  const errorMessage = document.getElementById('error-message');
-  const arrivalInput = document.getElementById('arrival') as HTMLInputElement;
-  const departureInput = document.getElementById('departure') as HTMLInputElement;
-  const dateError = document.getElementById('date-error');
+  // Re-bind on every Astro page-load (initial render + after each view transition swap)
+  // so the listener follows the swapped-in form element. See DE page for context.
+  function initBookingForm() {
+    const form = document.getElementById('booking-form') as HTMLFormElement | null;
+    if (!form || form.dataset.mfwsBound === 'true') return;
+    form.dataset.mfwsBound = 'true';
 
-  function validateDates() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let errorMsg = '';
-    let isValid = true;
+    const successMessage = document.getElementById('success-message');
+    const errorMessage = document.getElementById('error-message');
+    const arrivalInput = document.getElementById('arrival') as HTMLInputElement | null;
+    const departureInput = document.getElementById('departure') as HTMLInputElement | null;
+    const dateError = document.getElementById('date-error');
 
-    if (arrivalInput?.value) {
-      const arrival = new Date(arrivalInput.value);
-      if (arrival < today) {
-        errorMsg = 'Arrival date must be in the future.';
-        arrivalInput.setCustomValidity(errorMsg);
-        isValid = false;
-      } else {
-        arrivalInput.setCustomValidity('');
+    function validateDates() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let errorMsg = '';
+      let isValid = true;
+
+      if (arrivalInput?.value) {
+        const arrival = new Date(arrivalInput.value);
+        if (arrival < today) {
+          errorMsg = 'Arrival date must be in the future.';
+          arrivalInput.setCustomValidity(errorMsg);
+          isValid = false;
+        } else {
+          arrivalInput.setCustomValidity('');
+        }
       }
+
+      if (departureInput?.value) {
+        const departure = new Date(departureInput.value);
+        if (departure < today) {
+          errorMsg = 'Departure date must be in the future.';
+          departureInput.setCustomValidity(errorMsg);
+          isValid = false;
+        } else {
+          departureInput.setCustomValidity('');
+        }
+      }
+
+      if (arrivalInput?.value && departureInput?.value && isValid) {
+        const arrival = new Date(arrivalInput.value);
+        const departure = new Date(departureInput.value);
+        if (departure <= arrival) {
+          errorMsg = 'Departure date must be after the arrival date.';
+          departureInput.setCustomValidity(errorMsg);
+          isValid = false;
+        }
+      }
+
+      if (dateError) {
+        if (errorMsg) {
+          dateError.textContent = errorMsg;
+          dateError.classList.remove('hidden');
+        } else {
+          dateError.classList.add('hidden');
+        }
+      }
+      return isValid;
     }
 
-    if (departureInput?.value) {
-      const departure = new Date(departureInput.value);
-      if (departure < today) {
-        errorMsg = 'Departure date must be in the future.';
-        departureInput.setCustomValidity(errorMsg);
-        isValid = false;
-      } else {
-        departureInput.setCustomValidity('');
-      }
-    }
+    arrivalInput?.addEventListener('change', validateDates);
+    departureInput?.addEventListener('change', validateDates);
 
-    if (arrivalInput?.value && departureInput?.value && isValid) {
-      const arrival = new Date(arrivalInput.value);
-      const departure = new Date(departureInput.value);
-      if (departure <= arrival) {
-        errorMsg = 'Departure date must be after the arrival date.';
-        departureInput.setCustomValidity(errorMsg);
-        isValid = false;
-      }
-    }
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!validateDates()) return;
 
-    if (dateError) {
-      if (errorMsg) {
-        dateError.textContent = errorMsg;
-        dateError.classList.remove('hidden');
-      } else {
-        dateError.classList.add('hidden');
-      }
-    }
-    return isValid;
+      errorMessage?.classList.add('hidden');
+      successMessage?.classList.add('hidden');
+
+      // Show success (no backend in demo)
+      form.classList.add('hidden');
+      successMessage?.classList.remove('hidden');
+    });
   }
 
-  arrivalInput?.addEventListener('change', validateDates);
-  departureInput?.addEventListener('change', validateDates);
-
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!validateDates()) return;
-
-    errorMessage?.classList.add('hidden');
-    successMessage?.classList.add('hidden');
-
-    // Show success (no backend in demo)
-    form.classList.add('hidden');
-    successMessage?.classList.remove('hidden');
-  });
+  document.addEventListener('astro:page-load', initBookingForm);
 </script>

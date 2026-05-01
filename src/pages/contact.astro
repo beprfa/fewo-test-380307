@@ -206,65 +206,6 @@ const terms = [
 </Layout>
 
 <script>
-  const form = document.getElementById('booking-form') as HTMLFormElement;
-  const successMessage = document.getElementById('success-message');
-  const errorMessage = document.getElementById('error-message');
-  const arrivalInput = document.getElementById('arrival') as HTMLInputElement;
-  const departureInput = document.getElementById('departure') as HTMLInputElement;
-  const dateError = document.getElementById('date-error');
-
-  function validateDates() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let errorMsg = '';
-    let isValid = true;
-
-    if (arrivalInput?.value) {
-      const arrival = new Date(arrivalInput.value);
-      if (arrival < today) {
-        errorMsg = 'Anreisedatum muss in der Zukunft liegen.';
-        arrivalInput.setCustomValidity(errorMsg);
-        isValid = false;
-      } else {
-        arrivalInput.setCustomValidity('');
-      }
-    }
-
-    if (departureInput?.value) {
-      const departure = new Date(departureInput.value);
-      if (departure < today) {
-        errorMsg = 'Abreisedatum muss in der Zukunft liegen.';
-        departureInput.setCustomValidity(errorMsg);
-        isValid = false;
-      } else {
-        departureInput.setCustomValidity('');
-      }
-    }
-
-    if (arrivalInput?.value && departureInput?.value && isValid) {
-      const arrival = new Date(arrivalInput.value);
-      const departure = new Date(departureInput.value);
-      if (departure <= arrival) {
-        errorMsg = 'Abreisedatum muss nach dem Anreisedatum liegen.';
-        departureInput.setCustomValidity(errorMsg);
-        isValid = false;
-      }
-    }
-
-    if (dateError) {
-      if (errorMsg) {
-        dateError.textContent = errorMsg;
-        dateError.classList.remove('hidden');
-      } else {
-        dateError.classList.add('hidden');
-      }
-    }
-    return isValid;
-  }
-
-  arrivalInput?.addEventListener('change', validateDates);
-  departureInput?.addEventListener('change', validateDates);
-
   declare global {
     interface Window {
       MFWS_TENANT_SLUG?: string;
@@ -272,83 +213,153 @@ const terms = [
     }
   }
 
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!validateDates()) return;
+  // Re-bind on every Astro page-load (initial render + after each view transition swap).
+  // The previous version captured DOM refs once at module init; after a view transition
+  // the form was replaced and the listener never got attached to the new element, so the
+  // submit fell through to the browser's native GET to /contact?...
+  function initBookingForm() {
+    const form = document.getElementById('booking-form') as HTMLFormElement | null;
+    if (!form || form.dataset.mfwsBound === 'true') return;
+    form.dataset.mfwsBound = 'true';
 
-    errorMessage?.classList.add('hidden');
-    successMessage?.classList.add('hidden');
+    const successMessage = document.getElementById('success-message');
+    const errorMessage = document.getElementById('error-message');
+    const arrivalInput = document.getElementById('arrival') as HTMLInputElement | null;
+    const departureInput = document.getElementById('departure') as HTMLInputElement | null;
+    const dateError = document.getElementById('date-error');
 
-    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
-    if (submitBtn) submitBtn.disabled = true;
+    function validateDates() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let errorMsg = '';
+      let isValid = true;
 
-    const tenantSlug = window.MFWS_TENANT_SLUG;
-    const apiBase = window.MFWS_PUBLIC_API_BASE_URL;
+      if (arrivalInput?.value) {
+        const arrival = new Date(arrivalInput.value);
+        if (arrival < today) {
+          errorMsg = 'Anreisedatum muss in der Zukunft liegen.';
+          arrivalInput.setCustomValidity(errorMsg);
+          isValid = false;
+        } else {
+          arrivalInput.setCustomValidity('');
+        }
+      }
 
-    const data = new FormData(form);
-    const apartmentSlug = String(data.get('apartment') || '');
-    const fullName = String(data.get('name') || '').trim();
-    const [firstName, ...rest] = fullName.split(/\s+/);
-    const lastName = rest.join(' ') || firstName;
+      if (departureInput?.value) {
+        const departure = new Date(departureInput.value);
+        if (departure < today) {
+          errorMsg = 'Abreisedatum muss in der Zukunft liegen.';
+          departureInput.setCustomValidity(errorMsg);
+          isValid = false;
+        } else {
+          departureInput.setCustomValidity('');
+        }
+      }
 
-    const payload = {
-      guestFirstName: firstName,
-      guestLastName: lastName,
-      guestEmail: String(data.get('email') || ''),
-      guestPhone: String(data.get('phone') || '') || null,
-      startDate: String(data.get('arrival') || ''),
-      endDate: String(data.get('departure') || ''),
-      numberOfGuests: parseInt(String(data.get('guests') || '1'), 10),
-      message: String(data.get('message') || '') || null,
-      honeypot: String(data.get('website-url') || '') || null,
-    };
+      if (arrivalInput?.value && departureInput?.value && isValid) {
+        const arrival = new Date(arrivalInput.value);
+        const departure = new Date(departureInput.value);
+        if (departure <= arrival) {
+          errorMsg = 'Abreisedatum muss nach dem Anreisedatum liegen.';
+          departureInput.setCustomValidity(errorMsg);
+          isValid = false;
+        }
+      }
 
-    const showError = (msg: string) => {
-      const errorText = document.getElementById('error-text');
-      if (errorText) errorText.textContent = msg;
-      errorMessage?.classList.remove('hidden');
-      if (submitBtn) submitBtn.disabled = false;
-    };
-
-    if (!tenantSlug || !apiBase) {
-      // Markers not replaced (local dev / template misconfig). Show success
-      // anyway so the demo still appears functional, but log the gap.
-      console.warn('Booking endpoint markers missing — skipping POST.');
-      form.classList.add('hidden');
-      successMessage?.classList.remove('hidden');
-      return;
+      if (dateError) {
+        if (errorMsg) {
+          dateError.textContent = errorMsg;
+          dateError.classList.remove('hidden');
+        } else {
+          dateError.classList.add('hidden');
+        }
+      }
+      return isValid;
     }
 
-    try {
-      const res = await fetch(
-        `${apiBase}/api/public/tenants/${tenantSlug}/apartments/${apartmentSlug}/booking-requests`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(payload),
-        }
-      );
+    arrivalInput?.addEventListener('change', validateDates);
+    departureInput?.addEventListener('change', validateDates);
 
-      if (res.status === 200) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!validateDates()) return;
+
+      errorMessage?.classList.add('hidden');
+      successMessage?.classList.add('hidden');
+
+      const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+      if (submitBtn) submitBtn.disabled = true;
+
+      const tenantSlug = window.MFWS_TENANT_SLUG;
+      const apiBase = window.MFWS_PUBLIC_API_BASE_URL;
+
+      const data = new FormData(form);
+      const apartmentSlug = String(data.get('apartment') || '');
+      const fullName = String(data.get('name') || '').trim();
+      const [firstName, ...rest] = fullName.split(/\s+/);
+      const lastName = rest.join(' ') || firstName;
+
+      const payload = {
+        guestFirstName: firstName,
+        guestLastName: lastName,
+        guestEmail: String(data.get('email') || ''),
+        guestPhone: String(data.get('phone') || '') || null,
+        startDate: String(data.get('arrival') || ''),
+        endDate: String(data.get('departure') || ''),
+        numberOfGuests: parseInt(String(data.get('guests') || '1'), 10),
+        message: String(data.get('message') || '') || null,
+        honeypot: String(data.get('website-url') || '') || null,
+      };
+
+      const showError = (msg: string) => {
+        const errorText = document.getElementById('error-text');
+        if (errorText) errorText.textContent = msg;
+        errorMessage?.classList.remove('hidden');
+        if (submitBtn) submitBtn.disabled = false;
+      };
+
+      if (!tenantSlug || !apiBase) {
+        // Markers not replaced (local dev / template misconfig). Show success
+        // anyway so the demo still appears functional, but log the gap.
+        console.warn('Booking endpoint markers missing — skipping POST.');
         form.classList.add('hidden');
         successMessage?.classList.remove('hidden');
-        // Tell the calendar widget to refetch so the new RESERVED slot shows up.
-        document.dispatchEvent(new CustomEvent('booking-request-submitted'));
         return;
       }
-      if (res.status === 400) {
-        const body = await res.json().catch(() => ({}));
-        showError(body.message || 'Bitte prüfen Sie Ihre Eingaben.');
-        return;
+
+      try {
+        const res = await fetch(
+          `${apiBase}/api/public/tenants/${tenantSlug}/apartments/${apartmentSlug}/booking-requests`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (res.status === 200) {
+          form.classList.add('hidden');
+          successMessage?.classList.remove('hidden');
+          // Tell the calendar widget to refetch so the new RESERVED slot shows up.
+          document.dispatchEvent(new CustomEvent('booking-request-submitted'));
+          return;
+        }
+        if (res.status === 400) {
+          const body = await res.json().catch(() => ({}));
+          showError(body.message || 'Bitte prüfen Sie Ihre Eingaben.');
+          return;
+        }
+        if (res.status === 404) {
+          showError('Diese Ferienwohnung ist nicht verfügbar.');
+          return;
+        }
+        showError('Bitte versuchen Sie es später noch einmal.');
+      } catch (err) {
+        console.error('Booking request failed', err);
+        showError('Verbindung zum Server fehlgeschlagen. Bitte versuchen Sie es später noch einmal.');
       }
-      if (res.status === 404) {
-        showError('Diese Ferienwohnung ist nicht verfügbar.');
-        return;
-      }
-      showError('Bitte versuchen Sie es später noch einmal.');
-    } catch (err) {
-      console.error('Booking request failed', err);
-      showError('Verbindung zum Server fehlgeschlagen. Bitte versuchen Sie es später noch einmal.');
-    }
-  });
+    });
+  }
+
+  document.addEventListener('astro:page-load', initBookingForm);
 </script>
